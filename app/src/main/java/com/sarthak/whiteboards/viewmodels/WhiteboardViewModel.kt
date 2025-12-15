@@ -1,10 +1,12 @@
 package com.sarthak.whiteboards.viewmodels
 
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.sarthak.whiteboards.models.Point
 import com.sarthak.whiteboards.models.ShapeModel
 import com.sarthak.whiteboards.models.ShapeType
@@ -12,11 +14,19 @@ import com.sarthak.whiteboards.models.StrokeModel
 import com.sarthak.whiteboards.models.TextModel
 import com.sarthak.whiteboards.models.ToolMode
 import com.sarthak.whiteboards.models.WhiteboardState
+import com.sarthak.whiteboards.models.db.WhiteboardFileEntity
+import com.sarthak.whiteboards.services.WhiteBoardSavingServices
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class WhiteboardViewModel : ViewModel() {
+@HiltViewModel
+class WhiteboardViewModel @Inject constructor(private val storageServices: WhiteBoardSavingServices): ViewModel() {
 
     private val _uiState = MutableStateFlow(WhiteboardState())
     val uiState: StateFlow<WhiteboardState> = _uiState
@@ -24,11 +34,15 @@ class WhiteboardViewModel : ViewModel() {
     var toolMode: ToolMode = ToolMode.NONE
     var currentColor by mutableStateOf("#000000")
     var currentStrokeWidth by mutableFloatStateOf(6f)
+    var currentEraserStrokeWidth by mutableFloatStateOf(6f)
     var selectedShapeType: ShapeType = ShapeType.LINE
 
     private var currentStrokePoints = mutableListOf<Point>()
+    var currentEraserPosition = mutableStateOf<Point?>(null)
+        private set
     private var shapeStartPoint: Point? = null
-
+    private val undoStack = mutableListOf<WhiteboardState>()
+    private val redoStack = mutableListOf<WhiteboardState>()
 
     fun startStroke(point: Point) {
         currentStrokePoints = mutableListOf(point)
@@ -59,22 +73,8 @@ class WhiteboardViewModel : ViewModel() {
     }
 
     fun endStroke() {
-
         currentStrokePoints.clear()
-    }
-
-
-    fun eraseAt(point: Point) {
-        val newStrokes = _uiState.value.strokes.mapNotNull { stroke ->
-            val filtered = stroke.points.filter { p ->
-                val dx = p.x - point.x
-                val dy = p.y - point.y
-                val dist = Math.sqrt((dx * dx + dy * dy).toDouble())
-                dist > 40
-            }
-            if (filtered.isEmpty()) null else stroke.copy(points = filtered)
-        }
-        _uiState.update { it.copy(strokes = newStrokes) }
+        saveCurrentStateToUndoStack()
     }
 
     fun startShape(point: Point) {
@@ -85,14 +85,14 @@ class WhiteboardViewModel : ViewModel() {
         val start = shapeStartPoint ?: return
         val shape = ShapeModel(
             type = selectedShapeType,
-            points = listOf(start, end),
+            topLeft = start,
+            bottomRight = end,
             color = currentColor
         )
-
         _uiState.update { it.copy(shapes = it.shapes + shape) }
         shapeStartPoint = null
+        saveCurrentStateToUndoStack()
     }
-
 
     fun addText(
         text: String,
@@ -108,6 +108,7 @@ class WhiteboardViewModel : ViewModel() {
         )
 
         _uiState.update { it.copy(texts = it.texts + textModel) }
+        saveCurrentStateToUndoStack()
     }
 
 
@@ -115,9 +116,54 @@ class WhiteboardViewModel : ViewModel() {
 
     fun loadFromState(state: WhiteboardState) {
         _uiState.value = state
+        undoStack.clear()
+        redoStack.clear()
+        undoStack.add(state)
     }
 
     fun clearBoard() {
         _uiState.value = WhiteboardState()
+    }
+
+    private fun saveCurrentStateToUndoStack() {
+        redoStack.clear()
+        undoStack.add(_uiState.value)
+    }
+
+    fun undo() {
+        if (undoStack.isNotEmpty()) {
+            val lastState = undoStack.removeLast()
+            redoStack.add(lastState)
+            _uiState.value = if (undoStack.isNotEmpty()) {
+                undoStack.last()
+            } else {
+                WhiteboardState()
+            }
+        }
+    }
+
+    fun redo() {
+        if (redoStack.isNotEmpty()) {
+            val redoState = redoStack.removeLast()
+            undoStack.add(redoState)
+            _uiState.value = redoState
+        }
+    }
+
+    fun saveCurrentBoard() {
+        viewModelScope.launch {
+            storageServices.save(_uiState.value)
+        }
+    }
+
+    fun getSavedFiles(): Flow<List<WhiteboardFileEntity>> = flow {
+        emit(storageServices.getAll())
+    }
+
+    fun loadFile(fileName: String) {
+        viewModelScope.launch {
+            val state = storageServices.load(fileName)
+            loadFromState(state)
+        }
     }
 }

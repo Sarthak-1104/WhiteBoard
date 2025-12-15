@@ -14,6 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -23,7 +26,11 @@ import androidx.compose.ui.unit.sp
 import com.sarthak.whiteboards.models.Point
 import com.sarthak.whiteboards.models.ShapeType
 import com.sarthak.whiteboards.models.ToolMode
+import com.sarthak.whiteboards.models.db.WhiteboardFileEntity
 import com.sarthak.whiteboards.viewmodels.WhiteboardViewModel
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 @Composable
 fun WhiteboardCanvas(
@@ -46,9 +53,10 @@ fun WhiteboardCanvas(
                         when (viewModel.toolMode) {
 
                             ToolMode.DRAW -> viewModel.startStroke(point)
-                            ToolMode.ERASE -> viewModel.eraseAt(point)
+//                            ToolMode.ERASE -> viewModel.startEraser(point)
                             ToolMode.SHAPE -> viewModel.startShape(point)
                             ToolMode.TEXT -> {}
+                            ToolMode.NONE -> {}
                             else -> {}
                         }
                     },
@@ -58,9 +66,10 @@ fun WhiteboardCanvas(
                         when (viewModel.toolMode) {
 
                             ToolMode.DRAW -> viewModel.continueStroke(point)
-                            ToolMode.ERASE -> viewModel.eraseAt(point)
+//                            ToolMode.ERASE -> viewModel.updateEraser(point)
                             ToolMode.SHAPE -> shapePreviewEnd = point
                             ToolMode.TEXT -> {}
+                            ToolMode.NONE -> {}
                             else -> {}
                         }
                     },
@@ -73,7 +82,7 @@ fun WhiteboardCanvas(
                                 shapePreviewEnd = null
                             }
                             ToolMode.TEXT -> {}
-                            ToolMode.ERASE -> {}
+//                            ToolMode.ERASE -> {viewModel.endEraser()}
                             else -> {}
                         }
                     }
@@ -82,9 +91,12 @@ fun WhiteboardCanvas(
             .pointerInput(Unit) {
 
                 detectTapGestures { offset ->
-                    if (viewModel.toolMode == ToolMode.TEXT) {
-                        textInputPosition = Point(offset.x, offset.y)
-                        showTextInput = true
+                    when(viewModel.toolMode) {
+                        ToolMode.TEXT -> {
+                            textInputPosition = Point(offset.x, offset.y)
+                            showTextInput = true
+                        }
+                        else -> {}
                     }
                 }
             }
@@ -101,56 +113,87 @@ fun WhiteboardCanvas(
             drawPath(
                 path = path,
                 color = Color(android.graphics.Color.parseColor(stroke.color)),
-                style = Stroke(width = stroke.width.dp.toPx())
+                style = Stroke(
+                    width = stroke.width.dp.toPx(),
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round
+                )
             )
         }
 
+        viewModel.currentEraserPosition.value?.let { pos ->
+
+            drawCircle(
+                color = Color.White,
+                radius = (viewModel.currentEraserStrokeWidth/2).dp.toPx(),
+                center = Offset(pos.x, pos.y)
+            )
+            drawCircle(
+                color = Color.Black,
+                radius = (viewModel.currentEraserStrokeWidth/2).dp.toPx(),
+                center = Offset(pos.x, pos.y),
+                style = Stroke(width = 1.dp.toPx())
+            )
+        }
 
         state.shapes.forEach { shape ->
-            val p1 = shape.points.first()
-            val p2 = shape.points.last()
             val color = Color(android.graphics.Color.parseColor(shape.color))
 
             when (shape.type) {
-
                 ShapeType.RECTANGLE -> drawRect(
                     color = color,
-                    topLeft = Offset(p1.x, p1.y),
+                    topLeft = Offset(shape.topLeft.x, shape.topLeft.y),
                     size = androidx.compose.ui.geometry.Size(
-                        width = p2.x - p1.x,
-                        height = p2.y - p1.y
+                        width = shape.bottomRight.x - shape.topLeft.x,
+                        height = shape.bottomRight.y - shape.topLeft.y
                     ),
                     style = Stroke(width = 5f)
                 )
 
                 ShapeType.CIRCLE -> drawOval(
                     color = color,
-                    topLeft = Offset(p1.x, p1.y),
+                    topLeft = Offset(shape.topLeft.x, shape.topLeft.y),
                     size = androidx.compose.ui.geometry.Size(
-                        width = p2.x - p1.x,
-                        height = p2.y - p1.y
+                        width = shape.bottomRight.x - shape.topLeft.x,
+                        height = shape.bottomRight.y - shape.topLeft.y
                     ),
                     style = Stroke(width = 5f)
                 )
 
                 ShapeType.LINE -> drawLine(
                     color = color,
-                    start = Offset(p1.x, p1.y),
-                    end = Offset(p2.x, p2.y),
+                    start = Offset(shape.topLeft.x, shape.topLeft.y),
+                    end = Offset(shape.bottomRight.x, shape.bottomRight.y),
                     strokeWidth = 5f
                 )
 
                 ShapeType.POLYGON -> {
-                    if (shape.points.size >= 3) {
-                        val polyPath = Path().apply {
-                            moveTo(shape.points[0].x, shape.points[0].y)
-                            for (i in 1 until shape.points.size) {
-                                lineTo(shape.points[i].x, shape.points[i].y)
-                            }
-                            close()
+                    val left = shape.topLeft.x
+                    val top = shape.topLeft.y
+                    val width = shape.bottomRight.x - shape.topLeft.x
+                    val height = shape.bottomRight.y - shape.topLeft.y
+                    val centerX = left + width / 2
+                    val centerY = top + height / 2
+
+                    val pentagonPath = Path().apply {
+                        val radiusX = width / 2 * 0.85f
+                        val radiusY = height / 2 * 0.85f
+
+                        for (i in 0..4) {
+                            val angle = (i * 72f - 90f) * Math.PI.toFloat() / 180f
+                            val x = centerX + cos(angle) * radiusX
+                            val y = centerY + sin(angle) * radiusY
+                            if (i == 0) moveTo(x, y)
+                            else lineTo(x, y)
                         }
-                        drawPath(polyPath, color, style = Stroke(width = 5f))
+                        close()
                     }
+
+                    drawPath(
+                        path = pentagonPath,
+                        color = color,
+                        style = Stroke(width = 5f)
+                    )
                 }
             }
         }
@@ -187,7 +230,12 @@ fun WhiteboardCanvas(
                         strokeWidth = 3f
                     )
 
-                    else -> {}
+                    ShapeType.POLYGON -> drawPentagonPreview(
+                        color = color,
+                        start = Offset(start.x, start.y),
+                        end = Offset(end.x, end.y),
+                        strokeWidth = 3f
+                    )
                 }
             }
         }
@@ -218,6 +266,7 @@ fun WhiteboardCanvas(
             }
         )
     }
+
 }
 
 @Composable
@@ -249,3 +298,35 @@ fun TextInputDialog(
         }
     )
 }
+
+fun DrawScope.drawPentagonPreview(
+    color: Color,
+    start: Offset,
+    end: Offset,
+    strokeWidth: Float
+) {
+    val left = minOf(start.x, end.x)
+    val top = minOf(start.y, end.y)
+    val width = abs(end.x - start.x)
+    val height = abs(end.y - start.y)
+    val centerX = left + width / 2
+    val centerY = top + height / 2
+
+    val pentagonPath = Path().apply {
+        val radiusX = width / 2 * 0.75f
+        val radiusY = height / 2 * 0.75f
+
+        for (i in 0..4) {
+            val angle = (i * 72f - 90f) * Math.PI.toFloat() / 180f
+            val x = centerX + cos(angle) * radiusX
+            val y = centerY + sin(angle) * radiusY
+            if (i == 0) moveTo(x, y)
+            else lineTo(x, y)
+        }
+        close()
+    }
+
+    drawPath(pentagonPath, color, style = Stroke(width = strokeWidth))
+}
+
+

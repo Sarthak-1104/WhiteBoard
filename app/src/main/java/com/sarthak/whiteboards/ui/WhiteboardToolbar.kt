@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.sarthak.whiteboards.R
 import com.sarthak.whiteboards.models.ShapeType
 import com.sarthak.whiteboards.models.ToolMode
+import com.sarthak.whiteboards.models.db.WhiteboardFileEntity
 import com.sarthak.whiteboards.viewmodels.WhiteboardViewModel
 
 @Composable
@@ -34,6 +36,14 @@ fun WhiteboardToolbar(viewModel: WhiteboardViewModel) {
     val scrollState = rememberScrollState()
     var selectedTool by remember { mutableStateOf(ToolMode.NONE) }
     var selectedShape by remember { mutableStateOf(ShapeType.LINE) }
+    var showFileDrawer by remember { mutableStateOf(false) }
+    var savedFiles by remember { mutableStateOf(emptyList<WhiteboardFileEntity>())}
+
+    LaunchedEffect(Unit) {
+        viewModel.getSavedFiles().collect { files ->
+            savedFiles = files
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -85,17 +95,26 @@ fun WhiteboardToolbar(viewModel: WhiteboardViewModel) {
         }
 
         //STROKE
-        if (viewModel.toolMode == ToolMode.DRAW) {
+        if (viewModel.toolMode == ToolMode.DRAW || viewModel.toolMode == ToolMode.ERASE) {
             Column(horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(vertical = 5.dp)) {
                 Text("Stroke", style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(10.dp))
-
                 Slider(
-                    value = viewModel.currentStrokeWidth,
-                    onValueChange = { viewModel.currentStrokeWidth = it },
+                    value = when(viewModel.toolMode){
+                        ToolMode.DRAW -> viewModel.currentStrokeWidth
+                        ToolMode.ERASE -> viewModel.currentEraserStrokeWidth
+                        else -> {viewModel.currentStrokeWidth}
+                    },
+                    onValueChange = { when(viewModel.toolMode){
+                        ToolMode.DRAW -> viewModel.currentStrokeWidth = it
+                        ToolMode.ERASE -> viewModel.currentEraserStrokeWidth = it
+                        else -> {viewModel.currentStrokeWidth = it}
+                    }  },
                     valueRange = 3f..30f,
-                    modifier = Modifier.padding(bottom = 5.dp).height(40.dp)
+                    modifier = Modifier
+                        .padding(bottom = 5.dp)
+                        .height(40.dp)
                 )
             }
         }
@@ -158,6 +177,40 @@ fun WhiteboardToolbar(viewModel: WhiteboardViewModel) {
                 viewModel.clearBoard()
             }
         }
+
+        //UNDO/REDO BUTTON
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 5.dp)) {
+            Text("Undo/Redo", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(10.dp))
+            ToolbarButton(R.drawable.undo_ic) {
+                viewModel.undo()
+            }
+            ToolbarButton(R.drawable.redo_ic) {
+                viewModel.redo()
+            }
+        }
+
+        //OPEN/SAVE FILE
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 5.dp)) {
+            Text("Open", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(10.dp))
+            ToolbarButton(R.drawable.file_open_ic) {
+                showFileDrawer = true
+            }
+            ToolbarButton(R.drawable.save_file_ic) {
+                viewModel.saveCurrentBoard()
+            }
+        }
+
     }
+
+    if (showFileDrawer) {
+        SavedFileDrawer(whiteboardFiles = savedFiles, viewModel = viewModel, isVisible = true) {
+            showFileDrawer = false
+        }
+    }
+
 }
 

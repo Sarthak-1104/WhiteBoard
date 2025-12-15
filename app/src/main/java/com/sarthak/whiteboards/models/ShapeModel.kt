@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ShapeModel(
     val type: ShapeType,
-    val points: List<Point>,
+    val topLeft: Point,
+    val bottomRight: Point,
     val color: String
 )
