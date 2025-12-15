@@ -1,35 +1,57 @@
 package com.sarthak.whiteboards.services
 
+import android.content.Context
+import android.os.Environment
+import com.sarthak.whiteboards.models.WhiteboardFile
 import com.sarthak.whiteboards.models.WhiteboardState
-import com.sarthak.whiteboards.models.db.WhiteboardDao
-import com.sarthak.whiteboards.models.db.WhiteboardFileEntity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.text.SimpleDateFormat
-import java.util.*
+import java.io.File
 import javax.inject.Inject
 
-class WhiteBoardSavingServices @Inject constructor(private val dao: WhiteboardDao) {
+class WhiteBoardSavingServices @Inject constructor(
+    private val context: Context
+) {
 
     private val json = Json { prettyPrint = true }
 
-    suspend fun save(state: WhiteboardState) {
-        val timestamp = System.currentTimeMillis()
-        val formatter = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-        val fileName = "whiteboard_${formatter.format(Date(timestamp))}.json"
+    private val whiteboardDir: File
+        get() {
+            val downloads = Environment
+                .getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val dir = File(downloads, "Whiteboards")
+            if (!dir.exists()) dir.mkdirs()
+            return dir
+        }
 
+    suspend fun save(
+        fileName: String,
+        state: WhiteboardState
+    ) = withContext(Dispatchers.IO) {
         val jsonString = json.encodeToString(state)
-
-        dao.insert(
-            WhiteboardFileEntity(fileName = fileName, json = jsonString)
-        )
+        File(whiteboardDir, fileName).writeText(jsonString)
     }
 
-    suspend fun getAll(): List<WhiteboardFileEntity> =
-        dao.getAll()
+    suspend fun getAll(): List<WhiteboardFile> =
+        withContext(Dispatchers.IO) {
+            whiteboardDir
+                .listFiles { file -> file.extension == "json" }
+                ?.map {
+                    WhiteboardFile(
+                        fileName = it.name,
+                        lastModified = it.lastModified()
+                    )
+                }
+                ?: emptyList()
+        }
 
-    suspend fun load(fileName: String): WhiteboardState {
-        val entity = dao.getByName(fileName)
-        return json.decodeFromString(entity.json)
-    }
+    suspend fun load(fileName: String): WhiteboardState =
+        withContext(Dispatchers.IO) {
+            val file = File(whiteboardDir, fileName)
+            val jsonString = file.readText()
+            json.decodeFromString(jsonString)
+        }
 }
+

@@ -4,9 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -15,7 +13,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,23 +24,14 @@ import androidx.compose.ui.unit.dp
 import com.sarthak.whiteboards.R
 import com.sarthak.whiteboards.models.ShapeType
 import com.sarthak.whiteboards.models.ToolMode
-import com.sarthak.whiteboards.models.db.WhiteboardFileEntity
 import com.sarthak.whiteboards.viewmodels.WhiteboardViewModel
 
 @Composable
-fun WhiteboardToolbar(viewModel: WhiteboardViewModel) {
+fun WhiteboardToolbar(viewModel: WhiteboardViewModel, showFileDrawerState: (Boolean) -> Unit) {
 
     val scrollState = rememberScrollState()
     var selectedTool by remember { mutableStateOf(ToolMode.NONE) }
     var selectedShape by remember { mutableStateOf(ShapeType.LINE) }
-    var showFileDrawer by remember { mutableStateOf(false) }
-    var savedFiles by remember { mutableStateOf(emptyList<WhiteboardFileEntity>())}
-
-    LaunchedEffect(Unit) {
-        viewModel.getSavedFiles().collect { files ->
-            savedFiles = files
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -197,19 +185,13 @@ fun WhiteboardToolbar(viewModel: WhiteboardViewModel) {
             Text("Open", style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(10.dp))
             ToolbarButton(R.drawable.file_open_ic) {
-                showFileDrawer = true
+                showFileDrawerState(true)
             }
             ToolbarButton(R.drawable.save_file_ic) {
                 viewModel.saveCurrentBoard()
             }
         }
 
-    }
-
-    if (showFileDrawer) {
-        SavedFileDrawer(whiteboardFiles = savedFiles, viewModel = viewModel, isVisible = true) {
-            showFileDrawer = false
-        }
     }
 
 }

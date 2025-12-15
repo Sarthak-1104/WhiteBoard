@@ -1,6 +1,5 @@
 package com.sarthak.whiteboards.viewmodels
 
-import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -13,16 +12,21 @@ import com.sarthak.whiteboards.models.ShapeType
 import com.sarthak.whiteboards.models.StrokeModel
 import com.sarthak.whiteboards.models.TextModel
 import com.sarthak.whiteboards.models.ToolMode
+import com.sarthak.whiteboards.models.WhiteboardFile
 import com.sarthak.whiteboards.models.WhiteboardState
-import com.sarthak.whiteboards.models.db.WhiteboardFileEntity
 import com.sarthak.whiteboards.services.WhiteBoardSavingServices
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -43,6 +47,9 @@ class WhiteboardViewModel @Inject constructor(private val storageServices: White
     private var shapeStartPoint: Point? = null
     private val undoStack = mutableListOf<WhiteboardState>()
     private val redoStack = mutableListOf<WhiteboardState>()
+
+    private val _savedFiles = MutableStateFlow<List<WhiteboardFile>>(emptyList())
+    val savedFiles: StateFlow<List<WhiteboardFile>> = _savedFiles
 
     fun startStroke(point: Point) {
         currentStrokePoints = mutableListOf(point)
@@ -152,13 +159,22 @@ class WhiteboardViewModel @Inject constructor(private val storageServices: White
 
     fun saveCurrentBoard() {
         viewModelScope.launch {
-            storageServices.save(_uiState.value)
+            val timestamp = System.currentTimeMillis()
+            val formatter = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+            val fileName = "whiteboard_${formatter.format(Date(timestamp))}.json"
+
+            storageServices.save(
+                fileName = fileName,
+                state = _uiState.value
+            )
         }
     }
 
-    fun getSavedFiles(): Flow<List<WhiteboardFileEntity>> = flow {
-        emit(storageServices.getAll())
-    }
+
+    fun getSavedFiles(): Flow<List<WhiteboardFile>> =
+        flow { emit(storageServices.getAll()) }
+            .flowOn(Dispatchers.IO)
+
 
     fun loadFile(fileName: String) {
         viewModelScope.launch {
@@ -166,4 +182,11 @@ class WhiteboardViewModel @Inject constructor(private val storageServices: White
             loadFromState(state)
         }
     }
+
+    fun refreshSavedFiles() {
+        viewModelScope.launch {
+            _savedFiles.value = storageServices.getAll()
+        }
+    }
+
 }

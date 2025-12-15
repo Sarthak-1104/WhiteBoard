@@ -31,24 +31,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import com.sarthak.whiteboards.models.db.WhiteboardFileEntity
-import com.sarthak.whiteboards.viewmodels.WhiteboardViewModel
+import com.sarthak.whiteboards.models.WhiteboardFile
 
 @Composable
 fun SavedFileDrawer(
-    whiteboardFiles: List<WhiteboardFileEntity>,
-    viewModel: WhiteboardViewModel,
+    whiteboardFiles: List<WhiteboardFile>,
     isVisible: Boolean,
+    onFileClick: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     AnimatedVisibility(
         visible = isVisible,
         enter = slideInHorizontally(
-            initialOffsetX = { fullWidth -> fullWidth },
+            initialOffsetX = { it },
             animationSpec = tween(300)
         ),
         exit = slideOutHorizontally(
-            targetOffsetX = { fullWidth -> fullWidth },
+            targetOffsetX = { it },
             animationSpec = tween(300)
         )
     ) {
@@ -56,10 +55,11 @@ fun SavedFileDrawer(
             modifier = Modifier
                 .fillMaxHeight()
                 .width(LocalConfiguration.current.screenWidthDp.dp * 0.4f)
-                .background(color = Color.White)
+                .background(Color.White)
                 .padding(top = 16.dp)
         ) {
             Column {
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -68,15 +68,13 @@ fun SavedFileDrawer(
                 ) {
                     Text(
                         text = "Saved Files",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     IconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Close drawer",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            contentDescription = "Close drawer"
                         )
                     }
                 }
@@ -87,7 +85,10 @@ fun SavedFileDrawer(
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(
+                            horizontal = 16.dp,
+                            vertical = 8.dp
+                        ),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(
@@ -97,7 +98,7 @@ fun SavedFileDrawer(
                             FileItem(
                                 fileName = file.fileName,
                                 onClick = {
-                                    viewModel.loadFile(file.fileName)
+                                    onFileClick(file.fileName)
                                     onDismiss()
                                 }
                             )
@@ -117,7 +118,6 @@ fun SavedFileDrawer(
                         )
                     }
                 }
-
             }
         }
     }
