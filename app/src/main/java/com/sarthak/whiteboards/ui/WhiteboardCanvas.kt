@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -65,7 +66,7 @@ fun WhiteboardCanvas(
                         when (viewModel.toolMode) {
 
                             ToolMode.DRAW -> viewModel.startStroke(point)
-//                            ToolMode.ERASE -> viewModel.startEraser(point)
+                            ToolMode.ERASE -> viewModel.startEraser(point)
                             ToolMode.SHAPE -> viewModel.startShape(point)
                             ToolMode.TEXT -> {}
                             ToolMode.NONE -> {}
@@ -78,7 +79,7 @@ fun WhiteboardCanvas(
                         when (viewModel.toolMode) {
 
                             ToolMode.DRAW -> viewModel.continueStroke(point)
-//                            ToolMode.ERASE -> viewModel.updateEraser(point)
+                            ToolMode.ERASE -> viewModel.updateEraser(point)
                             ToolMode.SHAPE -> shapePreviewEnd = point
                             ToolMode.TEXT -> {}
                             ToolMode.NONE -> {}
@@ -94,7 +95,7 @@ fun WhiteboardCanvas(
                                 shapePreviewEnd = null
                             }
                             ToolMode.TEXT -> {}
-//                            ToolMode.ERASE -> {viewModel.endEraser()}
+                            ToolMode.ERASE -> {viewModel.endEraser()}
                             else -> {}
                         }
                     }
@@ -128,24 +129,10 @@ fun WhiteboardCanvas(
             }
     ) {
 
-        state.strokes.forEach { stroke ->
-            val path = Path()
-            if (stroke.points.isNotEmpty()) {
-                path.moveTo(stroke.points.first().x, stroke.points.first().y)
-                for (p in stroke.points.drop(1)) {
-                    path.lineTo(p.x, p.y)
-                }
-            }
-            drawPath(
-                path = path,
-                color = Color(android.graphics.Color.parseColor(stroke.color)),
-                style = Stroke(
-                    width = stroke.width.dp.toPx(),
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round
-                )
-            )
-        }
+
+        drawIntoCanvas { canvas ->
+            val checkPoint = canvas.nativeCanvas.saveLayer(0f, 0f, size.width, size.height, null)
+
 
         viewModel.currentEraserPosition.value?.let { pos ->
 
@@ -224,49 +211,7 @@ fun WhiteboardCanvas(
             }
         }
 
-        shapePreviewEnd?.let { end ->
-            viewModel.getShapeStartPoint()?.let { start ->
-                val color = Color.Gray.copy(alpha = 0.4f)
 
-                when (viewModel.selectedShapeType) {
-                    ShapeType.RECTANGLE -> drawRect(
-                        color = color,
-                        topLeft = Offset(start.x, start.y),
-                        size = androidx.compose.ui.geometry.Size(
-                            end.x - start.x,
-                            end.y - start.y
-                        ),
-                        style = Stroke(width = 3f)
-                    )
-
-                    ShapeType.CIRCLE -> drawOval(
-                        color = color,
-                        topLeft = Offset(start.x, start.y),
-                        size = androidx.compose.ui.geometry.Size(
-                            end.x - start.x,
-                            end.y - start.y
-                        ),
-                        style = Stroke(width = 3f)
-                    )
-
-                    ShapeType.LINE -> drawLine(
-                        color = color,
-                        start = Offset(start.x, start.y),
-                        end = Offset(end.x, end.y),
-                        strokeWidth = 3f
-                    )
-
-                    ShapeType.POLYGON -> drawPentagonPreview(
-                        color = color,
-                        start = Offset(start.x, start.y),
-                        end = Offset(end.x, end.y),
-                        strokeWidth = 3f
-                    )
-                }
-            }
-        }
-
-        drawIntoCanvas { canvas ->
             state.texts.forEach { txt ->
                 val paint = android.graphics.Paint().apply {
                     color = android.graphics.Color.parseColor(txt.color)
@@ -279,6 +224,78 @@ fun WhiteboardCanvas(
                     paint
                 )
             }
+
+            state.strokes.forEach { stroke ->
+                val path = Path()
+                if (stroke.points.isNotEmpty()) {
+                    path.moveTo(stroke.points.first().x, stroke.points.first().y)
+                    for (p in stroke.points.drop(1)) {
+                        path.lineTo(p.x, p.y)
+                    }
+                }
+                if (stroke.color == "ERASER") {
+                    drawPath(
+                        path = path,
+                        color = Color.White,
+                        style = Stroke(width = stroke.width.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                        blendMode = BlendMode.Clear
+                    )
+                } else {
+                    drawPath(
+                        path = path,
+                        color = Color(android.graphics.Color.parseColor(stroke.color)),
+                        style = Stroke(
+                            width = stroke.width.dp.toPx(),
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round
+                        )
+                    )
+                }
+            }
+
+            shapePreviewEnd?.let { end ->
+                viewModel.getShapeStartPoint()?.let { start ->
+                    val color = Color.Gray.copy(alpha = 0.4f)
+
+                    when (viewModel.selectedShapeType) {
+                        ShapeType.RECTANGLE -> drawRect(
+                            color = color,
+                            topLeft = Offset(start.x, start.y),
+                            size = androidx.compose.ui.geometry.Size(
+                                end.x - start.x,
+                                end.y - start.y
+                            ),
+                            style = Stroke(width = 3f)
+                        )
+
+                        ShapeType.CIRCLE -> drawOval(
+                            color = color,
+                            topLeft = Offset(start.x, start.y),
+                            size = androidx.compose.ui.geometry.Size(
+                                end.x - start.x,
+                                end.y - start.y
+                            ),
+                            style = Stroke(width = 3f)
+                        )
+
+                        ShapeType.LINE -> drawLine(
+                            color = color,
+                            start = Offset(start.x, start.y),
+                            end = Offset(end.x, end.y),
+                            strokeWidth = 3f
+                        )
+
+                        ShapeType.POLYGON -> drawPentagonPreview(
+                            color = color,
+                            start = Offset(start.x, start.y),
+                            end = Offset(end.x, end.y),
+                            strokeWidth = 3f
+                        )
+                    }
+                }
+            }
+
+            canvas.nativeCanvas.restoreToCount(checkPoint)
         }
     }
 

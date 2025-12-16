@@ -100,7 +100,8 @@ fun WhiteboardToolbar(viewModel: WhiteboardViewModel, showFileDrawerState: (Bool
                     onValueChange = { when(viewModel.toolMode){
                         ToolMode.DRAW -> viewModel.currentStrokeWidth = it
                         ToolMode.ERASE -> viewModel.currentEraserStrokeWidth = it
-                        else -> {viewModel.currentStrokeWidth = it}
+                        ToolMode.TEXT -> viewModel.currentTextSize = it
+                        else -> {}
                     }  },
                     valueRange = 3f..30f,
                     modifier = Modifier
@@ -198,7 +199,7 @@ fun WhiteboardToolbar(viewModel: WhiteboardViewModel, showFileDrawerState: (Bool
         //SHARE PNG
         Column(horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(vertical = 5.dp)) {
-            Text("Open", style = MaterialTheme.typography.bodyLarge)
+            Text("Share", style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(10.dp))
             ToolbarButton(R.drawable.share_ic) {
                 viewModel.exportAndShareCanvas(context)

@@ -51,6 +51,7 @@ class WhiteboardViewModel @Inject constructor(private val storageServices: White
     var currentColor by mutableStateOf("#000000")
     var currentStrokeWidth by mutableFloatStateOf(6f)
     var currentEraserStrokeWidth by mutableFloatStateOf(6f)
+    var currentTextSize by mutableFloatStateOf(24f)
     var selectedShapeType: ShapeType = ShapeType.LINE
 
     private var currentStrokePoints = mutableListOf<Point>()
@@ -66,6 +67,43 @@ class WhiteboardViewModel @Inject constructor(private val storageServices: White
     var scale by mutableFloatStateOf(1f)
     var offset by mutableStateOf(Offset.Zero)
     var graphicsLayer: GraphicsLayer? = null
+
+    private var currentEraserPoints = mutableListOf<Point>()
+
+    fun startEraser(point: Point) {
+        currentEraserPoints = mutableListOf(point)
+
+        _uiState.update {
+            it.copy(strokes = it.strokes + StrokeModel(
+                points = listOf(point),
+                color = "ERASER",
+                width = currentEraserStrokeWidth
+            ))
+        }
+    }
+
+    fun updateEraser(point: Point) {
+        currentEraserPoints.add(point)
+        currentEraserPosition.value = point
+
+        _uiState.update { currentState ->
+            val updatedStrokes = currentState.strokes.toMutableList()
+            if (updatedStrokes.isNotEmpty()) {
+                updatedStrokes[updatedStrokes.lastIndex] = StrokeModel(
+                    points = currentEraserPoints.toList(),
+                    color = "ERASER",
+                    width = currentEraserStrokeWidth
+                )
+            }
+            currentState.copy(strokes = updatedStrokes)
+        }
+    }
+
+    fun endEraser() {
+        currentEraserPoints.clear()
+        currentEraserPosition.value = null
+        saveCurrentStateToUndoStack()
+    }
 
     fun startStroke(point: Point) {
         currentStrokePoints = mutableListOf(point)
@@ -121,7 +159,7 @@ class WhiteboardViewModel @Inject constructor(private val storageServices: White
         text: String,
         position: Point,
         color: String = currentColor,
-        size: Int = 24
+        size: Int = currentTextSize.toInt()
     ) {
         val textModel = TextModel(
             text = text,
