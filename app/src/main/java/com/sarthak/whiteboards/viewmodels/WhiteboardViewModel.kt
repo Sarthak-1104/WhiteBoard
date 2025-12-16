@@ -1,9 +1,21 @@
 package com.sarthak.whiteboards.viewmodels
 
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sarthak.whiteboards.models.Point
@@ -50,6 +62,10 @@ class WhiteboardViewModel @Inject constructor(private val storageServices: White
 
     private val _savedFiles = MutableStateFlow<List<WhiteboardFile>>(emptyList())
     val savedFiles: StateFlow<List<WhiteboardFile>> = _savedFiles
+
+    var scale by mutableFloatStateOf(1f)
+    var offset by mutableStateOf(Offset.Zero)
+    var graphicsLayer: GraphicsLayer? = null
 
     fun startStroke(point: Point) {
         currentStrokePoints = mutableListOf(point)
@@ -187,6 +203,56 @@ class WhiteboardViewModel @Inject constructor(private val storageServices: White
         viewModelScope.launch {
             _savedFiles.value = storageServices.getAll()
         }
+    }
+
+    fun exportAndShareCanvas(context: Context) {
+        viewModelScope.launch {
+            val layer = graphicsLayer ?: return@launch
+
+            try {
+                val bitmap = layer.toImageBitmap().asAndroidBitmap()
+
+                val filename = "Whiteboard_${System.currentTimeMillis()}.png"
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        put(MediaStore.Images.Media.IS_PENDING, 1)
+                    }
+                }
+
+                val resolver = context.contentResolver
+                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+
+                uri?.let { targetUri ->
+                    resolver.openOutputStream(targetUri).use { stream ->
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream!!)
+                    }
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        values.clear()
+                        values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                        resolver.update(targetUri, values, null, null)
+                    }
+
+                    shareImage(context, targetUri)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun shareImage(context: Context, uri: Uri) {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        val chooser = Intent.createChooser(shareIntent, "Share Whiteboard via")
+        context.startActivity(chooser)
     }
 
 }

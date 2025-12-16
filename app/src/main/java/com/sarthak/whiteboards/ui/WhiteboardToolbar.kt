@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.sarthak.whiteboards.R
 import com.sarthak.whiteboards.models.ShapeType
@@ -32,6 +33,8 @@ fun WhiteboardToolbar(viewModel: WhiteboardViewModel, showFileDrawerState: (Bool
     val scrollState = rememberScrollState()
     var selectedTool by remember { mutableStateOf(ToolMode.NONE) }
     var selectedShape by remember { mutableStateOf(ShapeType.LINE) }
+
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -189,6 +192,16 @@ fun WhiteboardToolbar(viewModel: WhiteboardViewModel, showFileDrawerState: (Bool
             }
             ToolbarButton(R.drawable.save_file_ic) {
                 viewModel.saveCurrentBoard()
+            }
+        }
+
+        //SHARE PNG
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 5.dp)) {
+            Text("Open", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(10.dp))
+            ToolbarButton(R.drawable.share_ic) {
+                viewModel.exportAndShareCanvas(context)
             }
         }
 
